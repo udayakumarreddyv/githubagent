@@ -1,12 +1,14 @@
 # GitHub Agent - Fullstack Developer Bot
 
-A GitHub automation agent that acts as a fullstack developer, automatically listening to GitHub issues and implementing solutions by creating branches and pull requests with **FREE AI integration**.
+A GitHub automation agent that acts as a fullstack developer, automatically listening to GitHub issues and implementing solutions by creating branches and pull requests with **FREE AI integration** and **Multi-Agent Orchestration**.
 
 ## 🚀 Features
 
+- **🎭 Multi-Agent Orchestration**: Coordinated agents for code generation and email notifications
 - **🆓 Multiple Free AI Options**: Ollama (local), Hugging Face, Google Gemini with intelligent fallback
 - **🤖 Smart Code Generation**: AI-powered Java Spring Boot entity, repository, service, and controller generation
-- **📋 Template Fallback**: Always functional even without AI services
+- **� Email Notifications**: Automated team notifications when PRs are created
+- **�📋 Template Fallback**: Always functional even without AI services
 - **🪝 Webhook Integration**: Real-time GitHub webhook event processing
 - **🧠 Intelligent Issue Analysis**: Context-aware issue processing with project documentation integration
 - **🌳 Automated Branch Creation**: Feature branches with sanitized naming
@@ -14,6 +16,7 @@ A GitHub automation agent that acts as a fullstack developer, automatically list
 - **🔄 Pull Request Automation**: Detailed PRs with implementation summaries
 - **🛡️ Robust Error Handling**: Comprehensive error handling with transparent issue comments
 - **📚 Documentation-Aware**: Reads project README, copilot instructions, and package.json for context
+- **⏱️ Configurable Timeouts**: Extended processing time with orchestration monitoring
 
 ## 🏗️ Architecture
 
@@ -32,12 +35,22 @@ graph TB
         subgraph "Express.js Application"
             EP["/webhook Endpoint"]
             HC["/health Endpoint"]
+            ST["/status Endpoint"]
         end
         
-        subgraph "Core Components"
+        subgraph "Multi-Agent Orchestration"
+            ORCH[MultiAgentOrchestrator]
             WHandler[WebhookHandler]
+        end
+        
+        subgraph "Specialized Agents"
             GAgent[GitHubAgent]
+            EAgent[EmailNotificationAgent]
+        end
+        
+        subgraph "Core Services"
             AIService[FreeAIService]
+            MAIL[Nodemailer SMTP]
         end
         
         subgraph "AI Providers"
@@ -52,6 +65,11 @@ graph TB
             WS[Workspace]
             CLONE[Repository Clone]
         end
+        
+        subgraph "Notification Systems"
+            SMTP[SMTP Server]
+            TEAMS[Email Groups]
+        end
     end
     
     subgraph "Generated Code"
@@ -65,8 +83,15 @@ graph TB
     ISS --> WH
     WH --> EP
     EP --> WHandler
-    WHandler --> GAgent
+    WHandler --> ORCH
+    ORCH --> GAgent
+    ORCH --> EAgent
+    
+    %% Agent connections
     GAgent --> AIService
+    EAgent --> MAIL
+    MAIL --> SMTP
+    SMTP --> TEAMS
     
     %% AI Service connections
     AIService --> OLL
@@ -203,7 +228,68 @@ src/
     └── WebhookHandler.ts   # GitHub webhook event processing
 ```
 
-## 🎯 AI-Powered Code Generation
+## � Multi-Agent Orchestration
+
+The system uses a sophisticated multi-agent architecture that coordinates specialized agents to handle different aspects of issue processing:
+
+### Orchestration Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant GitHub
+    participant Orchestrator
+    participant CodeAgent
+    participant EmailAgent
+    participant Team
+    
+    User->>GitHub: Creates Issue
+    GitHub->>Orchestrator: Webhook Event
+    
+    Note over Orchestrator: Analyze Issue Criteria
+    
+    Orchestrator->>CodeAgent: Phase 1: Generate Code
+    Note over CodeAgent: AI Analysis<br/>Code Generation<br/>PR Creation
+    CodeAgent-->>Orchestrator: Success + PR URL
+    
+    Orchestrator->>EmailAgent: Phase 2: Send Notifications
+    Note over EmailAgent: Generate Email<br/>Send to Groups
+    EmailAgent->>Team: Email Notification
+    EmailAgent-->>Orchestrator: Email Sent
+    
+    Note over Orchestrator: Log Results<br/>Cleanup Workspace
+    
+    Orchestrator->>GitHub: Update Issue Comment
+```
+
+### Agent Responsibilities
+
+| Agent | Responsibility | Dependencies |
+|-------|---------------|-------------|
+| **MultiAgentOrchestrator** | Coordinates all agents, manages timeouts, logs results | All agents |
+| **GitHubAgent** | Code generation, Git operations, PR creation | FreeAIService, simple-git |
+| **EmailNotificationAgent** | Team notifications, email formatting | nodemailer, SMTP |
+| **FreeAIService** | AI-powered analysis and code generation | Ollama/HF/Gemini |
+
+### Configuration Options
+
+```typescript
+// Multi-agent configuration
+const orchestratorConfig = {
+  enableEmailNotifications: true,
+  emailGroups: ['developers', 'managers', 'qa'],
+  timeout: 15 * 60 * 1000, // 15 minutes
+}
+```
+
+### Error Handling & Fallbacks
+
+- **Code Generation Failures**: Uses template fallback, continues with email if configured
+- **Email Failures**: Logs error but doesn't block workflow, code generation still succeeds
+- **Timeout Handling**: 15-minute timeout per phase, graceful degradation
+- **Service Unavailability**: Each agent has independent fallback mechanisms
+
+## �🎯 AI-Powered Code Generation
 
 The agent can generate complete Spring Boot applications including:
 - **Entities**: JPA entities with proper annotations and validation
@@ -364,7 +450,40 @@ ollama serve
 # 2. Add to .env: GOOGLE_API_KEY=your_key
 ```
 
-### 4. GitHub Token Setup
+### 4. Email Notifications Setup (Optional)
+
+Configure email notifications to alert your team when PRs are created:
+
+#### 📧 SMTP Configuration
+```bash
+# Add to your .env file
+EMAIL_HOST=smtp.gmail.com          # Gmail SMTP server
+EMAIL_PORT=587                     # SMTP port
+EMAIL_SECURE=false                 # TLS (use true for SSL)
+EMAIL_USER=your-email@gmail.com    # Your email address
+EMAIL_PASS=your-app-password       # Gmail app password (not regular password)
+```
+
+#### 👥 Team Configuration
+```bash
+# Define email groups (comma-separated)
+EMAIL_DEV_TEAM=dev1@company.com,dev2@company.com,dev3@company.com
+EMAIL_MANAGERS=manager@company.com,pm@company.com
+EMAIL_QA_TEAM=qa1@company.com,qa2@company.com
+
+# Orchestration settings
+ENABLE_EMAIL_NOTIFICATIONS=true
+EMAIL_NOTIFICATION_GROUPS=developers,managers  # Which groups to notify
+ORCHESTRATION_TIMEOUT=900000                   # 15 minutes timeout
+```
+
+#### 🔐 Gmail App Password Setup
+1. Enable 2-Factor Authentication on your Gmail account
+2. Go to Google Account Settings → Security → App passwords
+3. Generate a new app password for "Mail"
+4. Use this app password (not your regular password) in `EMAIL_PASS`
+
+### 5. GitHub Token Setup
 
 1. Go to GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
 2. Create a new token with these permissions:
@@ -373,7 +492,7 @@ ollama serve
    - `pull_requests` (Read and write access to pull requests)
 3. Copy the token and add it to your `.env` file
 
-### 5. Webhook Configuration
+### 6. Webhook Configuration
 
 1. Go to your repository Settings → Webhooks
 2. Add a new webhook:
@@ -445,8 +564,36 @@ The agent can also be triggered by comments containing:
 
 ## 🎯 API Endpoints
 
-- `GET /health` - Health check endpoint
+- `GET /health` - Basic health check endpoint
+- `GET /status` - Comprehensive status including multi-agent orchestration details
 - `POST /webhook` - GitHub webhook endpoint for issue events
+
+### Status Endpoint Response
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-08-07T10:30:00Z",
+  "multiAgent": {
+    "config": {
+      "enableEmailNotifications": true,
+      "emailGroups": ["developers", "managers"],
+      "timeout": 900000
+    },
+    "emailAgent": {
+      "enabled": true,
+      "groups": ["developers", "managers", "qa", "all"],
+      "recipientCount": 8
+    },
+    "githubAgent": "active"
+  },
+  "version": "2.0.0",
+  "features": {
+    "codeGeneration": true,
+    "emailNotifications": true,
+    "multiAgentOrchestration": true
+  }
+}
+```
 
 ## � Example Issue Processing
 

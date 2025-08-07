@@ -119,6 +119,30 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Multi-agent orchestrator status endpoint
+app.get('/status', (req, res) => {
+  try {
+    const orchestratorStatus = webhookHandler.getOrchestratorStatus();
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      multiAgent: orchestratorStatus,
+      version: '2.0.0',
+      features: {
+        codeGeneration: true,
+        emailNotifications: orchestratorStatus.config.enableEmailNotifications,
+        multiAgentOrchestration: true
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      error: (error as Error).message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Test endpoint without signature verification (for debugging)
 app.post('/webhook-test', express.json(), async (req, res) => {
   console.log('🧪 Test webhook received (no signature verification)');

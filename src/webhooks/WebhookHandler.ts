@@ -1,13 +1,20 @@
 import { Webhooks } from '@octokit/webhooks';
 import { GitHubAgent, IssueData } from '../agent/GitHubAgent';
+import { MultiAgentOrchestrator } from '../agent/MultiAgentOrchestrator';
 
 export class WebhookHandler {
   private webhooks: Webhooks;
   private githubAgent: GitHubAgent;
+  private orchestrator: MultiAgentOrchestrator;
 
   constructor(webhooks: Webhooks, githubAgent: GitHubAgent) {
     this.webhooks = webhooks;
     this.githubAgent = githubAgent;
+    this.orchestrator = new MultiAgentOrchestrator(githubAgent, {
+      enableEmailNotifications: process.env.ENABLE_EMAIL_NOTIFICATIONS === 'true',
+      emailGroups: process.env.EMAIL_NOTIFICATION_GROUPS?.split(',') || ['developers'],
+      timeout: parseInt(process.env.ORCHESTRATION_TIMEOUT || '900000') // 15 minutes default
+    });
     this.setupWebhookHandlers();
   }
 
@@ -72,8 +79,22 @@ export class WebhookHandler {
         return;
       }
 
-      // Process the issue with the GitHub agent
-      await this.githubAgent.handleIssue(issueData);
+      // Process the issue with the multi-agent orchestrator
+      console.log(`🎭 Starting multi-agent orchestration for issue #${issueData.issueNumber}`);
+      const result = await this.orchestrator.orchestrateIssueProcessing(issueData);
+      
+      // Log final result
+      if (result.success) {
+        console.log(`✅ Issue #${issueData.issueNumber} processed successfully`);
+        if (result.prUrl) {
+          console.log(`🔗 Pull Request created: ${result.prUrl}`);
+        }
+      } else {
+        console.log(`❌ Issue #${issueData.issueNumber} processing failed`);
+        if (result.errors.length > 0) {
+          console.log('Errors:', result.errors);
+        }
+      }
     } catch (error) {
       console.error('❌ Error handling issue event:', error);
     }
@@ -122,5 +143,12 @@ export class WebhookHandler {
     ];
 
     return triggerCommands.some(command => comment.includes(command));
+  }
+
+  /**
+   * Get orchestrator status for monitoring
+   */
+  getOrchestratorStatus() {
+    return this.orchestrator.getStatus();
   }
 }
