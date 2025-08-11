@@ -16,7 +16,7 @@ This is a production-ready GitHub automation agent that acts as a fullstack deve
 
 ## Current Architecture
 - **Express.js server** with TypeScript for webhook handling and API endpoints
-- **Multi-provider AI integration** using FreeAIService (Ollama, Hugging Face, Google Gemini)
+- **Multi-provider AI integration** using FreeAIService (Claude Sonnet 4, Google Gemini, Ollama, Hugging Face)
 - **GitHub API integration** using @octokit/rest and @octokit/webhooks
 - **Git operations** using simple-git for repository management
 - **Documentation-aware AI** that reads project context for better code generation
@@ -66,7 +66,7 @@ When generating Java Spring Boot code:
 - Include comprehensive javadoc and inline comments
 
 ## Current Features
-- **Multi-Provider AI**: Ollama (local), Hugging Face, Google Gemini with automatic fallback
+- **Multi-Provider AI**: Claude Sonnet 4 (primary), Google Gemini, Ollama (local), Hugging Face with automatic fallback
 - **Intelligent Code Generation**: Complete Spring Boot applications (entities, repositories, services, controllers)
 - **Documentation-Aware**: Reads README.md, copilot-instructions.md, and package.json for context
 - **Extended Processing**: 10-minute timeout for complex AI analysis
@@ -93,7 +93,8 @@ When generating Java Spring Boot code:
 ## Environment Configuration
 - `GITHUB_TOKEN`: Personal access token with repo permissions
 - `WEBHOOK_SECRET`: Webhook security secret
+- `ANTHROPIC_API_KEY`: Claude Sonnet 4 API key (primary AI provider)
+- `GOOGLE_API_KEY`: Optional Google Gemini API key
 - `OLLAMA_URL`: Local Ollama service URL (http://localhost:11434)
 - `OLLAMA_MODEL`: AI model name (codellama:7b, qwen2:0.5b)
 - `HUGGINGFACE_API_KEY`: Optional HuggingFace API key
-- `GOOGLE_API_KEY`: Optional Google Gemini API key

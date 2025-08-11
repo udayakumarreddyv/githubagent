@@ -4,7 +4,7 @@ A GitHub automation agent that acts as a fullstack developer, automatically list
 
 ## 🚀 Features
 
-- **🆓 Multiple Free AI Options**: Ollama (local), Hugging Face, Google Gemini with intelligent fallback
+- **🆓 Multiple AI Options**: Claude Sonnet 4, Google Gemini, Ollama (local), Hugging Face with intelligent fallback
 - **🤖 Smart Code Generation**: AI-powered Java Spring Boot entity, repository, service, and controller generation
 - **📋 Template Fallback**: Always functional even without AI services
 - **🪝 Webhook Integration**: Real-time GitHub webhook event processing
@@ -41,9 +41,10 @@ graph TB
         end
         
         subgraph "AI Providers"
+            CLAUDE[Claude Sonnet 4]
+            GEM[Google Gemini API]
             OLL[Ollama Local AI]
             HF[Hugging Face API]
-            GEM[Google Gemini API]
             TEMP[Template Fallback]
         end
         
@@ -316,26 +317,50 @@ WORKSPACE_DIR=./workspace
 
 # FREE AI Configuration - Choose ONE option for enhanced code generation:
 
-# Option 1: Ollama (100% Free, Local AI - RECOMMENDED)
+# Option 1: Claude Sonnet 4 (Anthropic API - RECOMMENDED for best quality)
+# Get API key from: https://console.anthropic.com
+# Most capable AI for code generation and analysis
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# Option 2: Google Gemini (Generous Free Tier) 
+# Get free API key from: https://makersuite.google.com
+# GOOGLE_API_KEY=your_google_api_key_here
+
+# Option 3: Ollama (100% Free, Local AI)
 # 1. Download from: https://ollama.ai
 # 2. Install: ollama pull codellama:7b  (or qwen2:0.5b for faster responses)
 # 3. Start: ollama serve
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=codellama:7b
+# OLLAMA_URL=http://localhost:11434
+# OLLAMA_MODEL=codellama:7b
 
-# Option 2: Hugging Face (Free Tier)
+# Option 4: Hugging Face (Free Tier)
 # Get free API key from: https://huggingface.co
 # HUGGINGFACE_API_KEY=your_hf_token_here
 # HF_MODEL=microsoft/DialoGPT-medium
-
-# Option 3: Google Gemini (Generous Free Tier) 
-# Get free API key from: https://makersuite.google.com
-# GOOGLE_API_KEY=your_google_api_key_here
 ```
 
-### 3. Free AI Setup (Choose One Option)
+### 3. AI Service Setup (Choose One Option)
 
-#### 🥇 Option 1: Ollama (Recommended - 100% Free, Local)
+#### 🥇 Option 1: Claude Sonnet 4 (Recommended - Best Quality)
+```bash
+# 1. Create account at https://console.anthropic.com
+# 2. Get API key from the dashboard
+# 3. Add to .env: ANTHROPIC_API_KEY=your_key
+```
+
+**Advantages:**
+- Most capable AI for code generation
+- Excellent context understanding
+- Superior code quality and patterns
+- Best for complex Spring Boot implementations
+
+#### 🥈 Option 2: Google Gemini (Generous Free Tier)
+```bash
+# 1. Get free API key from https://makersuite.google.com
+# 2. Add to .env: GOOGLE_API_KEY=your_key
+```
+
+#### 🥉 Option 3: Ollama (100% Free, Local)
 ```bash
 # 1. Download and install Ollama from https://ollama.ai
 
@@ -351,17 +376,11 @@ ollama serve
 # 4. Ollama will run on http://localhost:11434 (default)
 ```
 
-#### 🥈 Option 2: Hugging Face (Free Tier)
+#### � Option 4: Hugging Face (Free Tier)
 ```bash
 # 1. Create free account at https://huggingface.co
 # 2. Get API token from profile settings
 # 3. Add to .env: HUGGINGFACE_API_KEY=your_token
-```
-
-#### 🥉 Option 3: Google Gemini (Generous Free Tier)
-```bash
-# 1. Get free API key from https://makersuite.google.com
-# 2. Add to .env: GOOGLE_API_KEY=your_key
 ```
 
 ### 4. GitHub Token Setup

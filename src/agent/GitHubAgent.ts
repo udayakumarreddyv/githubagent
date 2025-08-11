@@ -27,6 +27,42 @@ export class GitHubAgent {
     // Initialize Free AI service (multiple free options supported)
     this.aiService = new FreeAIService();
     console.log(`🤖 AI service initialized: ${this.aiService.getServiceType()}`);
+    
+    // Ensure workspace is properly isolated
+    this.ensureWorkspaceSetup();
+  }
+
+  /**
+   * Ensure workspace directory is properly set up and isolated
+   */
+  private async ensureWorkspaceSetup(): Promise<void> {
+    try {
+      // Create workspace directory if it doesn't exist
+      await fs.mkdir(this.workspaceDir, { recursive: true });
+      
+      // Create a .gitignore in workspace to prevent confusion with parent git repo
+      const workspaceGitignore = path.join(this.workspaceDir, '.gitignore');
+      try {
+        await fs.access(workspaceGitignore);
+      } catch {
+        // .gitignore doesn't exist, create it
+        const gitignoreContent = `# Workspace .gitignore
+# This prevents workspace repos from interfering with the main GitHub Agent repo
+
+# Don't track anything by default in workspace
+*
+
+# But allow .gitignore itself
+!.gitignore
+`;
+        await fs.writeFile(workspaceGitignore, gitignoreContent);
+        console.log(`✅ Created workspace .gitignore at ${workspaceGitignore}`);
+      }
+      
+      console.log(`📁 Workspace directory ready: ${this.workspaceDir}`);
+    } catch (error) {
+      console.warn(`⚠️ Could not set up workspace directory:`, error);
+    }
   }
 
   /**
@@ -81,17 +117,45 @@ export class GitHubAgent {
     try {
       await fs.access(repoPath);
       // Repository exists, update it
+      console.log(`🔄 Updating existing repository at ${repoPath}`);
       const git = simpleGit(repoPath);
+      
+      // Ensure we're in a git repository
+      const isRepo = await git.checkIsRepo();
+      if (!isRepo) {
+        console.log(`⚠️ Directory exists but is not a git repository, removing and re-cloning`);
+        await fs.rm(repoPath, { recursive: true, force: true });
+        throw new Error('Not a git repository');
+      }
+      
       await git.fetch();
       await git.checkout('main').catch(() => git.checkout('master'));
       await git.pull();
       console.log(`📦 Updated existing repository at ${repoPath}`);
     } catch (error) {
-      // Repository doesn't exist, clone it
+      // Repository doesn't exist or is corrupted, clone it
+      console.log(`📥 Cloning repository to ${repoPath}`);
+      
+      // Ensure workspace directory exists
       await fs.mkdir(this.workspaceDir, { recursive: true });
+      
+      // Remove any existing directory if it's corrupted
+      try {
+        await fs.rm(repoPath, { recursive: true, force: true });
+      } catch {
+        // Directory might not exist, that's fine
+      }
+      
       const cloneUrl = `https://github.com/${owner}/${repo}.git`;
       await simpleGit().clone(cloneUrl, repoPath);
-      console.log(`📥 Cloned repository to ${repoPath}`);
+      console.log(`✅ Successfully cloned repository to ${repoPath}`);
+      
+      // Verify the cloned repository
+      const git = simpleGit(repoPath);
+      const isRepo = await git.checkIsRepo();
+      if (!isRepo) {
+        throw new Error(`Failed to clone repository properly: ${repoPath}`);
+      }
     }
     
     return repoPath;
@@ -124,22 +188,20 @@ export class GitHubAgent {
           repoPath: repoPath  // Add repository path for documentation reading
         });
         
-        // Parse AI response and generate code
-        const generatedFiles = await this.generateCodeWithAI(issueData, codebaseStructure, codebaseMemory, repoPath, aiAnalysis);
-        
-        return `## 🤖 AI-Generated Implementation for Issue #${issueData.issueNumber}
+        return `## 🤖 AI Analysis for Issue #${issueData.issueNumber}
 
 ### AI Analysis:
 ${aiAnalysis}
 
-### Generated Files:
-${generatedFiles.map((file: any) => `- ${file.path} (${file.type})`).join('\n')}
-
-### Summary:
-- AI Analysis: ✅ Completed with AI Tools
-- Files Generated: ${generatedFiles.length}
+### Project Context:
 - Project Type: ${codebaseStructure.projectType}
 - Framework: ${codebaseStructure.framework}
+- Entities Found: ${codebaseMemory.entities.length}
+- Controllers Found: ${codebaseMemory.controllers.length}
+
+### Analysis Status:
+- AI Analysis: ✅ Completed with ${this.aiService.getServiceType()}
+- Ready for Implementation: ✅
 `;
       } catch (error) {
         console.error('❌ AI analysis failed, falling back to template-based approach:', error);
@@ -151,23 +213,22 @@ ${generatedFiles.map((file: any) => `- ${file.path} (${file.type})`).join('\n')}
     console.log('📝 Using template-based analysis...');
     const analysis = await this.generateIntelligentAnalysis(issueData, codebaseStructure, codebaseMemory);
     
-    // Generate code files based on the analysis
-    const generatedFiles = await this.generateCodeFromAnalysis(issueData, codebaseStructure, codebaseMemory, repoPath);
-    
-    // Return summary of what was generated
+    // Return summary of analysis (without generating code yet)
     const summary = `
-## 🚀 Generated Files for Issue #${issueData.issueNumber}
+## � Template Analysis for Issue #${issueData.issueNumber}
 
-### Files Created:
-${generatedFiles.map((file: any) => `- ${file.path}`).join('\n')}
+### Analysis:
+${analysis.substring(0, 500)}...
 
-### Summary:
-- Total files generated: ${generatedFiles.length}
+### Project Context:
 - Project type: ${codebaseStructure.projectType}
 - Framework: ${codebaseStructure.framework}
+- Entities Found: ${codebaseMemory.entities.length}
+- Controllers Found: ${codebaseMemory.controllers.length}
 
-### Analysis Context:
-${analysis.substring(0, 500)}...
+### Analysis Status:
+- Template Analysis: ✅ Completed
+- Ready for Implementation: ✅
 `;
 
     return summary;
@@ -596,7 +657,10 @@ ${this.generateContextualRecommendations(issueData, codebaseMemory)}
    */
   private parseIssueRequirements(issueData: IssueData): string[] {
     const requirements = [];
-    const fullText = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const fullText = primaryText || fallbackText;
     
     // Extract specific requirements
     if (fullText.includes('entity') || fullText.includes('model')) {
@@ -639,7 +703,10 @@ ${this.generateContextualRecommendations(issueData, codebaseMemory)}
    */
   private generateImplementationStrategy(issueData: IssueData, codebaseMemory: any): string {
     const strategy = [];
-    const fullText = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const fullText = primaryText || fallbackText;
     
     // Determine what needs to be created based on existing patterns
     if (fullText.includes('entity') || fullText.includes('model')) {
@@ -704,7 +771,10 @@ ${this.generateContextualRecommendations(issueData, codebaseMemory)}
     const requirements = this.parseIssueRequirements(issueData);
     
     // Determine what to generate based on issue content and requirements
-    const issueText = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const issueText = primaryText || fallbackText;
     
     // Extract entity name from issue
     const entityName = this.extractEntityNameFromIssue(issueData);
@@ -798,7 +868,7 @@ ${this.generateContextualRecommendations(issueData, codebaseMemory)}
   }
 
   /**
-   * Generate code using AI instead of templates
+   * Generate code using AI - COST OPTIMIZED VERSION (Reduced from 6 to 2 API calls)
    */
   private async generateCodeWithAI(
     issueData: IssueData, 
@@ -807,131 +877,146 @@ ${this.generateContextualRecommendations(issueData, codebaseMemory)}
     repoPath: string,
     aiAnalysis: string
   ): Promise<any[]> {
-    console.log('🤖 Generating code using AI...');
+    console.log('🤖 Generating code using AI (Cost Optimized)...');
     
     const generatedFiles = [];
     
     try {
-      // Parse AI analysis to extract entity name and requirements
-      const entityName = await this.aiService.extractEntityNameWithAI(issueData.title, issueData.body);
+      // OPTIMIZATION 1: Prioritize body content over title for better context
+      const primaryContent = issueData.body || issueData.title || '';
+      const fullContext = issueData.body ? 
+        `${issueData.body}\n\nTitle: ${issueData.title}` : 
+        issueData.title || '';
+      
+      console.log(`📝 Processing issue with ${primaryContent.length} characters of content`);
+      
+      const entityName = await this.aiService.extractEntityNameWithAI(
+        primaryContent,  // Use body as primary source
+        fullContext      // Pass full context as secondary
+      );
       console.log(`🎯 AI extracted entity name: ${entityName}`);
       
       const srcMainJava = path.join(repoPath, 'src', 'main', 'java');
       const packagePath = codebaseStructure.projectConventions?.packageStructure?.replace(/\./g, '/') || 'com/example/employee';
       
-      // Generate entity with AI
-      if (this.shouldGenerateEntity(issueData)) {
-        const entityCode = await this.aiService.generateJavaEntityWithAI(
-          entityName, 
-          issueData.body, 
+      // OPTIMIZATION 2: Generate ALL components in a single AI call (reduces from 4 calls to 1)
+      if (this.shouldGenerateAnyComponent(issueData)) {
+        console.log(`🚀 Generating ALL components in single AI call for: "${primaryContent.substring(0, 100)}..."`);
+        
+        const allComponents = await this.aiService.generateCompleteSpringBootComponentsWithAI(
+          entityName,
+          fullContext,  // Pass the complete context with body prioritized
           { ...codebaseStructure, repoPath }
         );
         
-        const entityPath = await this.writeJavaFile(
-          srcMainJava, 
-          `${packagePath}/model`, 
-          `${entityName}.java`, 
-          entityCode
-        );
-        
-        if (entityPath) {
-          generatedFiles.push({ type: 'entity', path: entityPath, name: entityName });
-          console.log(`✅ AI generated entity: ${entityPath}`);
+        // Write Entity
+        if (this.shouldGenerateEntity(issueData) && allComponents.entity) {
+          const entityPath = await this.writeJavaFile(
+            srcMainJava, 
+            `${packagePath}/model`, 
+            `${entityName}.java`, 
+            allComponents.entity
+          );
+          if (entityPath) {
+            generatedFiles.push({ type: 'entity', path: entityPath, name: entityName });
+            console.log(`✅ Entity generated: ${entityPath}`);
+          }
+        }
+
+        // Write Repository
+        if (this.shouldGenerateRepository(issueData) && allComponents.repository) {
+          const repositoryPath = await this.writeJavaFile(
+            srcMainJava, 
+            `${packagePath}/repository`, 
+            `${entityName}Repository.java`, 
+            allComponents.repository
+          );
+          if (repositoryPath) {
+            generatedFiles.push({ type: 'repository', path: repositoryPath, name: `${entityName}Repository` });
+            console.log(`✅ Repository generated: ${repositoryPath}`);
+          }
+        }
+
+        // Write Service
+        if (this.shouldGenerateService(issueData) && allComponents.service) {
+          const servicePath = await this.writeJavaFile(
+            srcMainJava, 
+            `${packagePath}/service`, 
+            `${entityName}Service.java`, 
+            allComponents.service
+          );
+          if (servicePath) {
+            generatedFiles.push({ type: 'service', path: servicePath, name: `${entityName}Service` });
+            console.log(`✅ Service generated: ${servicePath}`);
+          }
+        }
+
+        // Write Controller
+        if (this.shouldGenerateController(issueData) && allComponents.controller) {
+          const controllerPath = await this.writeJavaFile(
+            srcMainJava, 
+            `${packagePath}/controller`, 
+            `${entityName}Controller.java`, 
+            allComponents.controller
+          );
+          if (controllerPath) {
+            generatedFiles.push({ type: 'controller', path: controllerPath, name: `${entityName}Controller` });
+            console.log(`✅ Controller generated: ${controllerPath}`);
+          }
         }
       }
 
-      // Generate repository with AI
-      if (this.shouldGenerateRepository(issueData)) {
-        const repositoryCode = await this.aiService.generateJavaRepositoryWithAI(
-          entityName, 
-          issueData.body, 
-          { ...codebaseStructure, repoPath }
-        );
-        
-        const repositoryPath = await this.writeJavaFile(
-          srcMainJava, 
-          `${packagePath}/repository`, 
-          `${entityName}Repository.java`, 
-          repositoryCode
-        );
-        
-        if (repositoryPath) {
-          generatedFiles.push({ type: 'repository', path: repositoryPath, name: `${entityName}Repository` });
-          console.log(`✅ AI generated repository: ${repositoryPath}`);
-        }
-      }
-
-      // Generate service with AI
-      if (this.shouldGenerateService(issueData)) {
-        const serviceCode = await this.aiService.generateJavaServiceWithAI(
-          entityName, 
-          issueData.body, 
-          codebaseStructure
-        );
-        
-        const servicePath = await this.writeJavaFile(
-          srcMainJava, 
-          `${packagePath}/service`, 
-          `${entityName}Service.java`, 
-          serviceCode
-        );
-        
-        if (servicePath) {
-          generatedFiles.push({ type: 'service', path: servicePath, name: `${entityName}Service` });
-          console.log(`✅ AI generated service: ${servicePath}`);
-        }
-      }
-
-      // Generate controller with AI
-      if (this.shouldGenerateController(issueData)) {
-        const controllerCode = await this.aiService.generateJavaControllerWithAI(
-          entityName, 
-          issueData.body, 
-          codebaseStructure
-        );
-        
-        const controllerPath = await this.writeJavaFile(
-          srcMainJava, 
-          `${packagePath}/controller`, 
-          `${entityName}Controller.java`, 
-          controllerCode
-        );
-        
-        if (controllerPath) {
-          generatedFiles.push({ type: 'controller', path: controllerPath, name: `${entityName}Controller` });
-          console.log(`✅ AI generated controller: ${controllerPath}`);
-        }
-      }
-
-      console.log(`🎉 AI generated ${generatedFiles.length} files`);
+      console.log(`🎉 Cost-optimized AI generated ${generatedFiles.length} files with 67% fewer API calls`);
       return generatedFiles;
       
     } catch (error) {
-      console.error('❌ Error in AI code generation:', error);
+      console.error('❌ Error in cost-optimized AI code generation:', error);
       return generatedFiles; // Return whatever was generated successfully
     }
+  }
+
+  /**
+   * Helper method to check if any component should be generated
+   */
+  private shouldGenerateAnyComponent(issueData: IssueData): boolean {
+    return this.shouldGenerateEntity(issueData) || 
+           this.shouldGenerateRepository(issueData) || 
+           this.shouldGenerateService(issueData) || 
+           this.shouldGenerateController(issueData);
   }
 
   /**
    * Helper methods to determine what to generate based on issue content
    */
   private shouldGenerateEntity(issueData: IssueData): boolean {
-    const text = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const text = primaryText || fallbackText;
     return text.includes('entity') || text.includes('model') || text.includes('create') || text.includes('add');
   }
 
   private shouldGenerateRepository(issueData: IssueData): boolean {
-    const text = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const text = primaryText || fallbackText;
     return text.includes('repository') || text.includes('data') || text.includes('crud') || text.includes('database');
   }
 
   private shouldGenerateService(issueData: IssueData): boolean {
-    const text = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const text = primaryText || fallbackText;
     return text.includes('service') || text.includes('business') || text.includes('logic') || text.includes('crud');
   }
 
   private shouldGenerateController(issueData: IssueData): boolean {
-    const text = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const text = primaryText || fallbackText;
     return text.includes('controller') || text.includes('api') || text.includes('rest') || text.includes('endpoint');
   }
 
@@ -1034,7 +1119,10 @@ ${this.generateContextualRecommendations(issueData, codebaseMemory)}
    * Extract entity name from issue title and description
    */
   private extractEntityNameFromIssue(issueData: IssueData): string {
-    const fullText = `${issueData.title} ${issueData.body}`;
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body || '';
+    const fallbackText = issueData.title || '';
+    const fullText = primaryText || fallbackText;
     
     // Common patterns for entity names - improved to capture the actual entity name
     const patterns = [
@@ -1079,8 +1167,22 @@ ${this.generateContextualRecommendations(issueData, codebaseMemory)}
       }
     }
 
-    // If no pattern matches, try to extract from title more intelligently
-    const titleWords = issueData.title.split(/\s+/).filter(word => {
+    // If no pattern matches, try to extract from body first, then title
+    const bodyWords = (issueData.body || '').split(/\s+/).filter(word => {
+      const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
+      return cleanWord.length > 2 && 
+             !['the', 'and', 'for', 'add', 'new', 'create', 'entity', 'model', 'api', 'with', 'rest', 'crud'].includes(cleanWord);
+    });
+    
+    if (bodyWords.length > 0) {
+      let entityName = bodyWords[0];
+      entityName = entityName.charAt(0).toUpperCase() + entityName.slice(1).toLowerCase();
+      console.log(`🎯 Fallback entity name: "${entityName}" from body words`);
+      return entityName;
+    }
+
+    // Fallback to title if body doesn't provide a good entity name
+    const titleWords = (issueData.title || '').split(/\s+/).filter(word => {
       const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
       return cleanWord.length > 2 && 
              !['the', 'and', 'for', 'add', 'new', 'create', 'entity', 'model', 'api', 'with', 'rest', 'crud'].includes(cleanWord);
@@ -1089,7 +1191,7 @@ ${this.generateContextualRecommendations(issueData, codebaseMemory)}
     if (titleWords.length > 0) {
       let entityName = titleWords[0];
       entityName = entityName.charAt(0).toUpperCase() + entityName.slice(1).toLowerCase();
-      console.log(`🎯 Fallback entity name: "${entityName}" from title words`);
+      console.log(`🎯 Final fallback entity name: "${entityName}" from title words`);
       return entityName;
     }
 
@@ -1179,7 +1281,10 @@ ${await this.generateChangeRecommendations(issueData, codebaseStructure)}
    * Analyze individual file content for relevance to the issue
    */
   private analyzeFileContent(fileName: string, content: string, issueData: IssueData): string | null {
-    const issueKeywords = this.extractKeywords(issueData.title + ' ' + issueData.body);
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryContent = issueData.body || '';
+    const fallbackContent = issueData.title || '';
+    const issueKeywords = this.extractKeywords(primaryContent || fallbackContent);
     const fileKeywords = this.extractKeywords(content);
     
     // Check if file content is relevant to the issue
@@ -1262,8 +1367,27 @@ ${await this.generateChangeRecommendations(issueData, codebaseStructure)}
     const projectContext = await this.readProjectContext(repoPath, codebaseStructure);
     console.log(`📖 Found ${projectContext.existingEntities.length} entities, ${projectContext.existingControllers.length} controllers`);
     
-    // Step 3: Generate actual code changes based on project type and context
-    const generatedFiles = await this.generateCodeChangesWithContext(issueData, codebaseStructure, projectContext, repoPath);
+    // Step 3: Use AI-based code generation if available, otherwise fall back to template-based approach
+    let generatedFiles: any[] = [];
+    
+    if (this.aiService.isAIEnabled()) {
+      console.log(`🤖 Using ${this.aiService.getServiceType()} AI for intelligent code generation...`);
+      try {
+        // Build codebase memory for AI context
+        const codebaseMemory = await this.buildCodebaseMemory(repoPath, codebaseStructure);
+        
+        // Use AI-based code generation with full context
+        generatedFiles = await this.generateCodeWithAI(issueData, codebaseStructure, codebaseMemory, repoPath, solution);
+        console.log(`🎉 AI generated ${generatedFiles.length} files successfully`);
+      } catch (error) {
+        console.error('❌ AI code generation failed, falling back to template-based approach:', error);
+        // Fall back to template-based approach
+        generatedFiles = await this.generateCodeChangesWithContext(issueData, codebaseStructure, projectContext, repoPath);
+      }
+    } else {
+      console.log('📝 AI not available, using template-based approach...');
+      generatedFiles = await this.generateCodeChangesWithContext(issueData, codebaseStructure, projectContext, repoPath);
+    }
     
     // Step 4: Only create documentation if no actual code was generated
     if (generatedFiles.length === 0) {
@@ -1271,7 +1395,7 @@ ${await this.generateChangeRecommendations(issueData, codebaseStructure)}
       const changelogPath = path.join(repoPath, 'ISSUE_CHANGES.md');
       await fs.writeFile(changelogPath, solution);
     } else {
-      console.log(`✅ Generated ${generatedFiles.length} code files: ${generatedFiles.join(', ')}`);
+      console.log(`✅ Generated ${generatedFiles.length} code files: ${generatedFiles.map((f: any) => f.name || f).join(', ')}`);
     }
     
     console.log(`✅ Implemented changes in ${repoPath}`);
@@ -1595,7 +1719,10 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    * Check if issue requires a new entity
    */
   private shouldAddNewEntity(issueData: IssueData): boolean {
-    const content = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const content = primaryText || fallbackText;
     return content.includes('entity') || content.includes('model') || content.includes('add') && (content.includes('table') || content.includes('database'));
   }
 
@@ -1603,7 +1730,10 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    * Check if issue requires a new controller
    */
   private shouldAddNewController(issueData: IssueData): boolean {
-    const content = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const content = primaryText || fallbackText;
     return content.includes('endpoint') || content.includes('api') || content.includes('controller') || content.includes('rest');
   }
 
@@ -1611,7 +1741,10 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    * Check if issue requires a new service
    */
   private shouldAddNewService(issueData: IssueData): boolean {
-    const content = `${issueData.title} ${issueData.body}`.toLowerCase();
+    // Prioritize body content over title since titles might not be meaningful
+    const primaryText = issueData.body?.toLowerCase() || '';
+    const fallbackText = issueData.title?.toLowerCase() || '';
+    const content = primaryText || fallbackText;
     return content.includes('service') || content.includes('business logic') || content.includes('logic');
   }
 
@@ -1619,7 +1752,7 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    * Generate a new Java entity
    */
   private async generateNewJavaEntity(issueData: IssueData, repoPath: string, srcMainJava: string): Promise<void> {
-    const entityName = this.extractEntityName(issueData.title);
+    const entityName = this.extractEntityNameFromIssue(issueData);
     const packagePath = await this.findJavaPackagePath(srcMainJava);
     const entityPath = path.join(srcMainJava, packagePath, 'model', `${entityName}.java`);
 
@@ -1636,7 +1769,10 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    * Generate a new Java controller
    */
   private async generateNewJavaController(issueData: IssueData, repoPath: string, srcMainJava: string): Promise<void> {
-    const controllerName = this.extractControllerName(issueData.title);
+    // Use body content first, fallback to title
+    const primaryContent = issueData.body || '';
+    const fallbackContent = issueData.title || '';
+    const controllerName = this.extractControllerName(primaryContent || fallbackContent);
     const packagePath = await this.findJavaPackagePath(srcMainJava);
     const controllerPath = path.join(srcMainJava, packagePath, 'controller', `${controllerName}Controller.java`);
 
@@ -1653,7 +1789,10 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    * Generate a new Java service
    */
   private async generateNewJavaService(issueData: IssueData, repoPath: string, srcMainJava: string): Promise<void> {
-    const serviceName = this.extractServiceName(issueData.title);
+    // Use body content first, fallback to title
+    const primaryContent = issueData.body || '';
+    const fallbackContent = issueData.title || '';
+    const serviceName = this.extractServiceName(primaryContent || fallbackContent);
     const packagePath = await this.findJavaPackagePath(srcMainJava);
     const servicePath = path.join(srcMainJava, packagePath, 'service', `${serviceName}Service.java`);
 
@@ -1671,8 +1810,8 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    */
   private async generateNewJavaEntityWithContext(issueData: IssueData, projectContext: any, repoPath: string, srcMainJava: string): Promise<string | null> {
     try {
-      const entityName = this.extractEntityName(issueData.title);
-      console.log(`🔍 Extracting entity name from "${issueData.title}": ${entityName}`);
+      const entityName = this.extractEntityNameFromIssue(issueData);
+      console.log(`🔍 Extracting entity name from issue: ${entityName}`);
       
       const packagePath = projectContext.packageStructure || await this.findJavaPackagePath(srcMainJava);
       console.log(`📦 Using package path: ${packagePath}`);
@@ -1684,9 +1823,25 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
       await fs.mkdir(path.dirname(entityPath), { recursive: true });
       console.log(`📁 Created directory: ${path.dirname(entityPath)}`);
 
-      // Generate entity with project conventions
-      const entityContent = this.generateJavaEntityCodeWithContext(entityName, packagePath, projectContext);
-      console.log(`📝 Generated entity content (${entityContent.length} characters)`);
+      // Generate entity with project conventions using AI if available, or template as fallback
+      let entityContent: string;
+      if (this.aiService.isAIEnabled()) {
+        console.log(`🤖 Using AI to generate entity code for ${entityName}...`);
+        try {
+          entityContent = await this.aiService.generateJavaEntityWithAI(
+            entityName, 
+            issueData.body || issueData.title, 
+            { ...projectContext, packagePath, repoPath }
+          );
+          console.log(`📝 AI generated entity content (${entityContent.length} characters)`);
+        } catch (error) {
+          console.warn('⚠️ AI generation failed, falling back to template:', error);
+          entityContent = this.generateJavaEntityCodeWithContext(entityName, packagePath, projectContext);
+        }
+      } else {
+        console.log(`📝 Using template to generate entity code for ${entityName}...`);
+        entityContent = this.generateJavaEntityCodeWithContext(entityName, packagePath, projectContext);
+      }
       
       await fs.writeFile(entityPath, entityContent);
       console.log(`💾 Successfully wrote file: ${entityPath}`);
@@ -1708,15 +1863,34 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    */
   private async generateNewJavaControllerWithContext(issueData: IssueData, projectContext: any, repoPath: string, srcMainJava: string): Promise<string | null> {
     try {
-      const controllerName = this.extractControllerName(issueData.title);
+      // Use body content first, fallback to title
+      const primaryContent = issueData.body || '';
+      const fallbackContent = issueData.title || '';
+      const controllerName = this.extractControllerName(primaryContent || fallbackContent);
       const packagePath = projectContext.packageStructure || await this.findJavaPackagePath(srcMainJava);
       const controllerPath = path.join(srcMainJava, packagePath, 'controller', `${controllerName}Controller.java`);
 
       // Create controller directory if it doesn't exist
       await fs.mkdir(path.dirname(controllerPath), { recursive: true });
 
-      // Generate controller with project conventions
-      const controllerContent = this.generateJavaControllerCodeWithContext(controllerName, packagePath, projectContext);
+      // Generate controller with project conventions using AI if available, or template as fallback
+      let controllerContent: string;
+      if (this.aiService.isAIEnabled()) {
+        console.log(`🤖 Using AI to generate controller code for ${controllerName}...`);
+        try {
+          controllerContent = await this.aiService.generateJavaControllerWithAI(
+            controllerName, 
+            issueData.body || issueData.title, 
+            { ...projectContext, packagePath, repoPath }
+          );
+        } catch (error) {
+          console.warn('⚠️ AI generation failed, falling back to template:', error);
+          controllerContent = this.generateJavaControllerCodeWithContext(controllerName, packagePath, projectContext);
+        }
+      } else {
+        controllerContent = this.generateJavaControllerCodeWithContext(controllerName, packagePath, projectContext);
+      }
+      
       await fs.writeFile(controllerPath, controllerContent);
       
       console.log(`📄 Created new controller: ${controllerName}Controller.java`);
@@ -1732,16 +1906,35 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    */
   private async generateNewJavaServiceWithContext(issueData: IssueData, projectContext: any, repoPath: string, srcMainJava: string): Promise<string | null> {
     try {
-      const serviceName = this.extractServiceName(issueData.title);
-      const entityName = this.extractEntityName(issueData.title);
+      // Use body content first, fallback to title
+      const primaryContent = issueData.body || '';
+      const fallbackContent = issueData.title || '';
+      const serviceName = this.extractServiceName(primaryContent || fallbackContent);
+      const entityName = this.extractEntityNameFromIssue(issueData);
       const packagePath = projectContext.packageStructure || await this.findJavaPackagePath(srcMainJava);
       const servicePath = path.join(srcMainJava, packagePath, 'service', `${serviceName}Service.java`);
 
       // Create service directory if it doesn't exist
       await fs.mkdir(path.dirname(servicePath), { recursive: true });
 
-      // Generate service with project conventions
-      const serviceContent = this.generateJavaServiceCodeWithContext(serviceName, entityName, packagePath, projectContext);
+      // Generate service with project conventions using AI if available, or template as fallback
+      let serviceContent: string;
+      if (this.aiService.isAIEnabled()) {
+        console.log(`🤖 Using AI to generate service code for ${serviceName}...`);
+        try {
+          serviceContent = await this.aiService.generateJavaServiceWithAI(
+            serviceName, 
+            issueData.body || issueData.title, 
+            { ...projectContext, packagePath, repoPath, entityName }
+          );
+        } catch (error) {
+          console.warn('⚠️ AI generation failed, falling back to template:', error);
+          serviceContent = this.generateJavaServiceCodeWithContext(serviceName, entityName, packagePath, projectContext);
+        }
+      } else {
+        serviceContent = this.generateJavaServiceCodeWithContext(serviceName, entityName, packagePath, projectContext);
+      }
+      
       await fs.writeFile(servicePath, serviceContent);
       
       console.log(`📄 Created new service: ${serviceName}Service.java`);
@@ -1757,8 +1950,8 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
    */
   private async generateNewJavaRepositoryWithContext(issueData: IssueData, projectContext: any, repoPath: string, srcMainJava: string): Promise<string | null> {
     try {
-      const entityName = this.extractEntityName(issueData.title);
-      console.log(`🔍 Repository - Extracting entity name from "${issueData.title}": ${entityName}`);
+      const entityName = this.extractEntityNameFromIssue(issueData);
+      console.log(`🔍 Repository - Extracting entity name from issue: ${entityName}`);
       
       const packagePath = projectContext.packageStructure || await this.findJavaPackagePath(srcMainJava);
       console.log(`📦 Repository - Using package path: ${packagePath}`);
@@ -1770,9 +1963,25 @@ ${codebaseStructure.mainFiles.slice(0, 5).map((f: string) => `- ${f}`).join('\n'
       await fs.mkdir(path.dirname(repositoryPath), { recursive: true });
       console.log(`📁 Created repository directory: ${path.dirname(repositoryPath)}`);
 
-      // Generate repository with project conventions
-      const repositoryContent = this.generateJavaRepositoryCodeWithContext(entityName, packagePath, projectContext);
-      console.log(`📝 Generated repository content (${repositoryContent.length} characters)`);
+      // Generate repository with project conventions using AI if available, or template as fallback
+      let repositoryContent: string;
+      if (this.aiService.isAIEnabled()) {
+        console.log(`🤖 Using AI to generate repository code for ${entityName}...`);
+        try {
+          repositoryContent = await this.aiService.generateJavaRepositoryWithAI(
+            entityName, 
+            issueData.body || issueData.title, 
+            { ...projectContext, packagePath, repoPath }
+          );
+          console.log(`📝 AI generated repository content (${repositoryContent.length} characters)`);
+        } catch (error) {
+          console.warn('⚠️ AI generation failed, falling back to template:', error);
+          repositoryContent = this.generateJavaRepositoryCodeWithContext(entityName, packagePath, projectContext);
+        }
+      } else {
+        repositoryContent = this.generateJavaRepositoryCodeWithContext(entityName, packagePath, projectContext);
+        console.log(`📝 Template generated repository content (${repositoryContent.length} characters)`);
+      }
       
       await fs.writeFile(repositoryPath, repositoryContent);
       console.log(`💾 Successfully wrote repository file: ${repositoryPath}`);
@@ -2047,18 +2256,55 @@ public class ${serviceName}Service {
    * Commit and push changes
    */
   private async commitAndPush(issueData: IssueData, branchName: string, repoPath: string): Promise<void> {
+    console.log(`📝 Committing changes in repository: ${repoPath}`);
+    console.log(`🌿 Branch: ${branchName}`);
+    
     const git = simpleGit(repoPath);
     
-    await git.add('.');
-    await git.commit(`Fix #${issueData.issueNumber}: ${issueData.title}
+    try {
+      // Check git status before adding
+      const status = await git.status();
+      console.log(`📊 Git status: ${status.files.length} files changed`);
+      
+      // Add all changes with force flag to handle any .gitignore issues
+      await git.add(['-A', '.']);
+      console.log(`✅ Added all changes to staging`);
+      
+      // Commit with detailed message
+      await git.commit(`Fix #${issueData.issueNumber}: ${issueData.title}
 
 Auto-generated solution by GitHub Agent.
 
 Closes #${issueData.issueNumber}`);
-    
-    await git.push('origin', branchName);
-    
-    console.log(`📤 Pushed changes to branch: ${branchName}`);
+      console.log(`✅ Committed changes`);
+      
+      // Push to origin
+      await git.push('origin', branchName);
+      console.log(`📤 Pushed changes to branch: ${branchName}`);
+      
+    } catch (error) {
+      console.error(`❌ Git operation failed:`, error);
+      
+      // If it's a .gitignore issue, try to add files with force
+      if ((error as Error).message.includes('ignored') || (error as Error).message.includes('.gitignore')) {
+        console.log(`🔧 Attempting to force add files (bypassing .gitignore)`);
+        try {
+          await git.add(['-f', '.']);
+          await git.commit(`Fix #${issueData.issueNumber}: ${issueData.title}
+
+Auto-generated solution by GitHub Agent.
+
+Closes #${issueData.issueNumber}`);
+          await git.push('origin', branchName);
+          console.log(`✅ Successfully forced commit and push`);
+        } catch (forceError) {
+          console.error(`❌ Force commit also failed:`, forceError);
+          throw forceError;
+        }
+      } else {
+        throw error;
+      }
+    }
   }
 
   /**
@@ -2573,6 +2819,69 @@ public interface ${entityName}Repository extends JpaRepository<${entityName}, ${
     } catch (error) {
       console.error(`⚠️ Failed to cleanup workspace ${repoPath}:`, error);
       // Don't throw error - cleanup is non-critical
+    }
+  }
+
+  /**
+   * Clean up all workspace directories (for maintenance)
+   */
+  async cleanupAllWorkspaces(): Promise<void> {
+    try {
+      console.log(`🧹 Performing full workspace cleanup: ${this.workspaceDir}`);
+      
+      const entries = await fs.readdir(this.workspaceDir, { withFileTypes: true });
+      const directories = entries.filter(entry => entry.isDirectory() && !entry.name.startsWith('.'));
+      
+      console.log(`📁 Found ${directories.length} workspace directories to clean`);
+      
+      for (const dir of directories) {
+        const dirPath = path.join(this.workspaceDir, dir.name);
+        try {
+          await fs.rm(dirPath, { recursive: true, force: true });
+          console.log(`✅ Cleaned up: ${dir.name}`);
+        } catch (error) {
+          console.warn(`⚠️ Failed to cleanup ${dir.name}:`, error);
+        }
+      }
+      
+      console.log(`✅ Full workspace cleanup completed`);
+    } catch (error) {
+      console.error(`❌ Failed to perform full workspace cleanup:`, error);
+    }
+  }
+
+  /**
+   * Clean up old workspace directories (older than specified hours)
+   */
+  async cleanupOldWorkspaces(maxAgeHours: number = 24): Promise<void> {
+    try {
+      console.log(`🧹 Cleaning up workspace directories older than ${maxAgeHours} hours`);
+      
+      const entries = await fs.readdir(this.workspaceDir, { withFileTypes: true });
+      const directories = entries.filter(entry => entry.isDirectory() && !entry.name.startsWith('.'));
+      
+      const now = new Date();
+      let cleanedCount = 0;
+      
+      for (const dir of directories) {
+        const dirPath = path.join(this.workspaceDir, dir.name);
+        try {
+          const stats = await fs.stat(dirPath);
+          const ageHours = (now.getTime() - stats.mtime.getTime()) / (1000 * 60 * 60);
+          
+          if (ageHours > maxAgeHours) {
+            await fs.rm(dirPath, { recursive: true, force: true });
+            console.log(`✅ Cleaned up old workspace: ${dir.name} (${ageHours.toFixed(1)}h old)`);
+            cleanedCount++;
+          }
+        } catch (error) {
+          console.warn(`⚠️ Failed to process ${dir.name}:`, error);
+        }
+      }
+      
+      console.log(`✅ Cleaned up ${cleanedCount} old workspace directories`);
+    } catch (error) {
+      console.error(`❌ Failed to cleanup old workspaces:`, error);
     }
   }
 }
