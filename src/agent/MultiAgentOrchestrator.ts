@@ -1,16 +1,26 @@
 import { GitHubAgent, IssueData } from './GitHubAgent';
 import { EmailNotificationAgent, NotificationData } from './EmailNotificationAgent';
+import { CodeAgent } from './CodeAgent';
+import { TestAgent, TestResult } from './TestAgent';
+import { DeployAgent, DeploymentResult, DeploymentConfig } from './DeployAgent';
 
 export interface OrchestrationResult {
   success: boolean;
   agentResults: {
     codeGeneration: boolean;
+    testing: boolean;
+    deployment: boolean;
     emailNotification: boolean;
   };
   prUrl?: string;
+  serviceUrl?: string;
+  testResults?: TestResult;
+  deploymentResults?: DeploymentResult;
   errors: string[];
   timing: {
     codeGeneration: number;
+    testing: number;
+    deployment: number;
     emailNotification: number;
     total: number;
   };
@@ -18,30 +28,46 @@ export interface OrchestrationResult {
 
 export interface AgentConfig {
   enableEmailNotifications: boolean;
+  enableTesting: boolean;
+  enableDeployment: boolean;
   emailGroups: string[];
+  deploymentConfig?: Partial<DeploymentConfig>;
   timeout: number;
 }
 
 /**
  * Multi-Agent Orchestrator
- * Coordinates multiple agents to handle GitHub issues comprehensively
+ * Coordinates multiple specialized agents to handle GitHub issues comprehensively
  */
 export class MultiAgentOrchestrator {
   private githubAgent: GitHubAgent;
+  private codeAgent: CodeAgent;
+  private testAgent: TestAgent;
+  private deployAgent: DeployAgent;
   private emailAgent: EmailNotificationAgent;
   private config: AgentConfig;
 
   constructor(githubAgent: GitHubAgent, config: Partial<AgentConfig> = {}) {
     this.githubAgent = githubAgent;
+    // Note: CodeAgent needs Octokit instance, using githubAgent's octokit
+    this.codeAgent = new CodeAgent((githubAgent as any).octokit);
+    this.testAgent = new TestAgent();
+    this.deployAgent = new DeployAgent();
     this.emailAgent = new EmailNotificationAgent();
     
     this.config = {
       enableEmailNotifications: config.enableEmailNotifications ?? true,
+      enableTesting: config.enableTesting ?? true,
+      enableDeployment: config.enableDeployment ?? false, // Default to false for safety
       emailGroups: config.emailGroups ?? ['developers'],
+      deploymentConfig: config.deploymentConfig,
       timeout: config.timeout ?? 15 * 60 * 1000 // 15 minutes default
     };
     
-    console.log('🎭 Multi-Agent Orchestrator initialized');
+    console.log('🎭 Multi-Agent Orchestrator initialized with specialized agents');
+    console.log(`🤖 Code generation: enabled`);
+    console.log(`🧪 Testing: ${this.config.enableTesting ? 'enabled' : 'disabled'}`);
+    console.log(`🚀 Deployment: ${this.config.enableDeployment ? 'enabled' : 'disabled'}`);
     console.log(`📧 Email notifications: ${this.config.enableEmailNotifications ? 'enabled' : 'disabled'}`);
     
     this.logAgentStatus();
@@ -56,11 +82,15 @@ export class MultiAgentOrchestrator {
       success: false,
       agentResults: {
         codeGeneration: false,
+        testing: false,
+        deployment: false,
         emailNotification: false
       },
       errors: [],
       timing: {
         codeGeneration: 0,
+        testing: 0,
+        deployment: 0,
         emailNotification: 0,
         total: 0
       }
@@ -69,13 +99,29 @@ export class MultiAgentOrchestrator {
     console.log('🎭 Starting multi-agent orchestration for issue:', issueData.title);
     console.log('📋 Orchestration plan:');
     console.log('  1. 🤖 Code generation and PR creation');
-    console.log('  2. 📧 Email notification to team');
+    if (this.config.enableTesting) {
+      console.log('  2. 🧪 Test generation and execution');
+    }
+    if (this.config.enableDeployment) {
+      console.log('  3. � AWS deployment');
+    }
+    console.log(`  ${this.config.enableDeployment ? '4' : this.config.enableTesting ? '3' : '2'}. �📧 Email notification to team`);
 
     try {
       // Phase 1: Code Generation Agent
       await this.executeCodeGeneration(issueData, result);
       
-      // Phase 2: Email Notification Agent (if code generation succeeded)
+      // Phase 2: Testing Agent (if code generation succeeded and testing enabled)
+      if (result.agentResults.codeGeneration && this.config.enableTesting) {
+        await this.executeTesting(issueData, result);
+      }
+
+      // Phase 3: Deployment Agent (if testing passed and deployment enabled)
+      if (result.agentResults.testing && this.config.enableDeployment) {
+        await this.executeDeployment(issueData, result);
+      }
+
+      // Phase 4: Email Notification Agent (if any agent succeeded)
       if (result.agentResults.codeGeneration) {
         await this.executeEmailNotification(issueData, result);
       }
@@ -125,6 +171,98 @@ export class MultiAgentOrchestrator {
   }
 
   /**
+   * Execute testing phase
+   */
+  private async executeTesting(issueData: IssueData, result: OrchestrationResult): Promise<void> {
+    console.log('🧪 Phase 2: Starting test generation and execution agent...');
+    const startTime = Date.now();
+    
+    try {
+      // Get implemented files from code generation
+      const implementedFiles = this.predictImplementedFiles(issueData);
+      
+      // Get repository path (in real implementation, this would be from GitHubAgent)
+      const repoPath = `./workspace/${issueData.owner}-${issueData.repo}`;
+      
+      // Construct codebase structure
+      const codebaseStructure = {
+        projectConventions: {
+          packageStructure: 'com.example.employee'
+        }
+      };
+
+      // Execute test generation and execution
+      const testResults = await this.testAgent.generateAndExecuteTests(
+        issueData,
+        implementedFiles,
+        repoPath,
+        codebaseStructure
+      );
+      
+      result.testResults = testResults;
+      result.agentResults.testing = testResults.success;
+      result.timing.testing = Date.now() - startTime;
+      
+      if (testResults.success) {
+        console.log(`✅ Testing completed successfully in ${(result.timing.testing / 1000).toFixed(1)}s`);
+        console.log(`📊 Test Summary: ${testResults.metrics.passedTests}/${testResults.metrics.totalTests} tests passed`);
+      } else {
+        console.log(`❌ Testing failed in ${(result.timing.testing / 1000).toFixed(1)}s`);
+        result.errors.push('Test execution failed');
+      }
+      
+    } catch (error) {
+      result.agentResults.testing = false;
+      result.timing.testing = Date.now() - startTime;
+      result.errors.push(`Testing failed: ${(error as Error).message}`);
+      
+      console.log(`❌ Testing failed: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Execute deployment phase
+   */
+  private async executeDeployment(issueData: IssueData, result: OrchestrationResult): Promise<void> {
+    console.log('🚀 Phase 3: Starting AWS deployment agent...');
+    const startTime = Date.now();
+    
+    try {
+      // Get repository path (in real implementation, this would be from GitHubAgent)
+      const repoPath = `./workspace/${issueData.owner}-${issueData.repo}`;
+      
+      // Execute deployment
+      const deploymentResults = await this.deployAgent.deployToAWS(
+        repoPath,
+        result.testResults,
+        this.config.deploymentConfig
+      );
+      
+      result.deploymentResults = deploymentResults;
+      result.agentResults.deployment = deploymentResults.success;
+      result.timing.deployment = Date.now() - startTime;
+      result.serviceUrl = deploymentResults.serviceUrl;
+      
+      if (deploymentResults.success) {
+        console.log(`✅ Deployment completed successfully in ${(result.timing.deployment / 1000).toFixed(1)}s`);
+        console.log(`🌐 Service URL: ${deploymentResults.serviceUrl}`);
+      } else {
+        console.log(`❌ Deployment failed in ${(result.timing.deployment / 1000).toFixed(1)}s`);
+        if (deploymentResults.errorDetails) {
+          result.errors.push(...deploymentResults.errorDetails);
+        }
+      }
+      
+    } catch (error) {
+      result.agentResults.deployment = false;
+      result.timing.deployment = Date.now() - startTime;
+      result.errors.push(`Deployment failed: ${(error as Error).message}`);
+      
+      console.log(`❌ Deployment failed: ${(error as Error).message}`);
+    }
+  }
+
+  /**
    * Execute email notification phase
    */
   private async executeEmailNotification(issueData: IssueData, result: OrchestrationResult): Promise<void> {
@@ -134,7 +272,8 @@ export class MultiAgentOrchestrator {
       return;
     }
 
-    console.log('📧 Phase 2: Starting email notification agent...');
+    const phaseNumber = this.config.enableDeployment ? '4' : this.config.enableTesting ? '3' : '2';
+    console.log(`📧 Phase ${phaseNumber}: Starting email notification agent...`);
     const startTime = Date.now();
     
     try {
@@ -257,7 +396,21 @@ export class MultiAgentOrchestrator {
     console.log('🔍 Agent Status:');
     
     // GitHub Agent status
-    console.log('  🤖 GitHub Agent: ✅ Active');
+    console.log('  🤖 GitHub Agent: ✅ Active (legacy mode)');
+    console.log('  🎯 Code Agent: ✅ Active (specialized code generation)');
+    
+    // Test Agent status
+    console.log(`  🧪 Test Agent: ${this.config.enableTesting ? '✅ Active' : '⚠️ Disabled'}`);
+    if (this.config.enableTesting) {
+      console.log('    📝 Features: JUnit 5, Mockito, JaCoCo coverage');
+    }
+    
+    // Deploy Agent status
+    console.log(`  🚀 Deploy Agent: ${this.config.enableDeployment ? '✅ Active' : '⚠️ Disabled'}`);
+    if (this.config.enableDeployment) {
+      console.log('    ☁️ Target: AWS ECS with Fargate');
+      console.log(`    🌍 Region: ${this.config.deploymentConfig?.awsRegion || 'us-east-1'}`);
+    }
     
     // Email Agent status
     const emailStatus = this.emailAgent.getStatus();
@@ -276,6 +429,21 @@ export class MultiAgentOrchestrator {
     console.log('🎭 Orchestration Summary:');
     console.log(`  ✅ Overall Success: ${result.success}`);
     console.log(`  🤖 Code Generation: ${result.agentResults.codeGeneration ? '✅' : '❌'} (${result.timing.codeGeneration}ms)`);
+    
+    if (this.config.enableTesting) {
+      console.log(`  🧪 Testing: ${result.agentResults.testing ? '✅' : '❌'} (${result.timing.testing}ms)`);
+      if (result.testResults) {
+        console.log(`    📊 Tests: ${result.testResults.metrics.passedTests}/${result.testResults.metrics.totalTests} passed`);
+      }
+    }
+    
+    if (this.config.enableDeployment) {
+      console.log(`  🚀 Deployment: ${result.agentResults.deployment ? '✅' : '❌'} (${result.timing.deployment}ms)`);
+      if (result.serviceUrl) {
+        console.log(`    🌐 Service URL: ${result.serviceUrl}`);
+      }
+    }
+    
     console.log(`  📧 Email Notification: ${result.agentResults.emailNotification ? '✅' : '❌'} (${result.timing.emailNotification}ms)`);
     console.log(`  ⏱️ Total Time: ${(result.timing.total / 1000).toFixed(1)}s`);
     
