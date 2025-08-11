@@ -237,8 +237,8 @@ export class FreeAIService {
       });
 
       const text = response.content
-        .filter(content => content.type === 'text')
-        .map(content => content.text)
+        .filter((content: any) => content.type === 'text')
+        .map((content: any) => content.text)
         .join('\n');
 
       return { text, success: true };

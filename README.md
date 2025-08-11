@@ -1,19 +1,21 @@
-# GitHub Agent - Fullstack Developer Bot
+# GitHub Agent - AI-Powered Fullstack Developer Bot
 
-A GitHub automation agent that acts as a fullstack developer, automatically listening to GitHub issues and implementing solutions by creating branches and pull requests with **FREE AI integration**.
+A production-ready GitHub automation agent that acts as a comprehensive fullstack developer, automatically listening to GitHub issues and implementing complete solutions by creating branches and pull requests with **FREE AI integration** and intelligent multi-provider fallback system.
 
-## 🚀 Features
+## 🚀 Enhanced Features
 
-- **🆓 Multiple AI Options**: Claude Sonnet 4, Google Gemini, Ollama (local), Hugging Face with intelligent fallback
-- **🤖 Smart Code Generation**: AI-powered Java Spring Boot entity, repository, service, and controller generation
-- **📋 Template Fallback**: Always functional even without AI services
-- **🪝 Webhook Integration**: Real-time GitHub webhook event processing
-- **🧠 Intelligent Issue Analysis**: Context-aware issue processing with project documentation integration
-- **🌳 Automated Branch Creation**: Feature branches with sanitized naming
-- **💻 Full-Stack Implementation**: Complete Spring Boot application structure generation
-- **🔄 Pull Request Automation**: Detailed PRs with implementation summaries
-- **🛡️ Robust Error Handling**: Comprehensive error handling with transparent issue comments
-- **📚 Documentation-Aware**: Reads project README, copilot instructions, and package.json for context
+- **🧠 Multi-Provider AI System**: Claude Sonnet 4 (primary), Google Gemini, Ollama (local), Hugging Face with intelligent fallback chain
+- **🤖 Advanced Code Generation**: AI-powered Java Spring Boot entity, repository, service, and controller generation with quality scoring
+- **📋 Robust Template Fallback**: Always functional even when all AI services are unavailable
+- **🪝 Secure Webhook Integration**: Real-time GitHub webhook event processing with signature validation
+- **🧠 Context-Aware Analysis**: Intelligent issue processing with project documentation integration (README, package.json, copilot-instructions)
+- **🌳 Smart Branch Management**: Automated feature branch creation with sanitized naming conventions
+- **💻 Complete Implementation**: Full-stack Spring Boot application structure generation with best practices
+- **🔄 Automated Pull Requests**: Detailed PRs with implementation summaries, code explanations, and testing guidance
+- **🛡️ Enterprise-Grade Error Handling**: Comprehensive error handling with transparent issue comments and fallback mechanisms
+- **📚 Documentation Intelligence**: Reads and understands project context for consistent code generation
+- **⏱️ Configurable Timeouts**: Extended processing time (10-minute default) with progress monitoring
+- **🔒 Security-First Design**: Webhook signature validation, secure token handling, and safe repository operations
 
 ## 🏗️ Architecture
 
@@ -315,37 +317,49 @@ WEBHOOK_SECRET=your_webhook_secret_here
 PORT=3000
 WORKSPACE_DIR=./workspace
 
-# FREE AI Configuration - Choose ONE option for enhanced code generation:
+# AI Provider Configuration - Multiple providers with intelligent fallback
+# The system will try providers in order: Claude → Gemini → Ollama → HuggingFace → Templates
 
-# Option 1: Claude Sonnet 4 (Anthropic API - RECOMMENDED for best quality)
+# Primary Provider: Claude Sonnet 4 (Anthropic API - RECOMMENDED for best quality)
 # Get API key from: https://console.anthropic.com
-# Most capable AI for code generation and analysis
+# Most capable AI for professional-grade code generation and analysis
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
-# Option 2: Google Gemini (Generous Free Tier) 
+# Secondary Provider: Google Gemini (Generous Free Tier) 
 # Get free API key from: https://makersuite.google.com
-# GOOGLE_API_KEY=your_google_api_key_here
+# Excellent fallback with generous usage limits
+GOOGLE_API_KEY=your_google_api_key_here
 
-# Option 3: Ollama (100% Free, Local AI)
+# Local Provider: Ollama (100% Free, Offline AI)
 # 1. Download from: https://ollama.ai
-# 2. Install: ollama pull codellama:7b  (or qwen2:0.5b for faster responses)
-# 3. Start: ollama serve
-# OLLAMA_URL=http://localhost:11434
-# OLLAMA_MODEL=codellama:7b
+# 2. Install model: ollama pull codellama:7b  (or qwen2:0.5b for faster responses)
+# 3. Start service: ollama serve
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=codellama:7b
 
-# Option 4: Hugging Face (Free Tier)
-# Get free API key from: https://huggingface.co
-# HUGGINGFACE_API_KEY=your_hf_token_here
-# HF_MODEL=microsoft/DialoGPT-medium
+# Backup Provider: Hugging Face (Free Tier)
+# Get free API key from: https://huggingface.co/settings/tokens
+HUGGINGFACE_API_KEY=your_hf_token_here
+
+# Additional Configuration
+TIMEOUT_MINUTES=10  # AI operation timeout
+LOG_LEVEL=info      # Logging level (debug, info, warn, error)
 ```
 
-### 3. AI Service Setup (Choose One Option)
+### 3. AI Service Setup (Multi-Provider Configuration)
 
-#### 🥇 Option 1: Claude Sonnet 4 (Recommended - Best Quality)
+#### 🥇 Primary: Claude Sonnet 4 (Recommended - Highest Quality)
 ```bash
 # 1. Create account at https://console.anthropic.com
-# 2. Get API key from the dashboard
-# 3. Add to .env: ANTHROPIC_API_KEY=your_key
+# 2. Navigate to API Keys section
+# 3. Generate new API key
+# 4. Add to .env: ANTHROPIC_API_KEY=your_key
+# 
+# Benefits:
+# - Highest code quality and understanding
+# - Best at following complex requirements
+# - Superior error handling and edge cases
+# - Most accurate Spring Boot code generation
 ```
 
 **Advantages:**
