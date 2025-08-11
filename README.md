@@ -135,17 +135,18 @@ graph TB
 
 ### Orchestration Pipeline
 
-The Multi-Agent Orchestrator coordinates a sophisticated 4-phase pipeline:
+The Multi-Agent Orchestrator coordinates a sophisticated 4-phase pipeline with **Test-Driven Git Operations**:
 
 1. **🎯 Code Generation Phase**
    - AI-powered Spring Boot component generation
    - Code quality analysis and scoring
-   - Git branch creation and file organization
+   - **Local file storage** (NOT committed to Git yet)
 
-2. **🧪 Testing Phase** (Optional)
-   - Automated JUnit test generation
-   - Test execution with coverage reporting
-   - Quality gate enforcement
+2. **🧪 Testing Phase** (Critical Validation)
+   - Automated JUnit test generation and execution
+   - Test coverage reporting and threshold validation
+   - **Git operations ONLY after successful testing**
+   - Feature branch creation, commit, and PR creation
 
 3. **🚀 Deployment Phase** (Optional)
    - Docker containerization
@@ -154,8 +155,10 @@ The Multi-Agent Orchestrator coordinates a sophisticated 4-phase pipeline:
 
 4. **📧 Notification Phase**
    - Professional team notifications
-   - Comprehensive reporting with metrics
+   - Comprehensive reporting with test metrics
    - Multi-group email distribution
+
+**🔑 Key Principle**: Code is committed to GitHub **ONLY** after successful testing validation, ensuring repository integrity.
 
 ## 🔄 Detailed Workflow Diagrams
 
@@ -173,11 +176,14 @@ flowchart TD
     E -->|No| X[Report Failure & Exit]
     
     F -->|Yes| G[Phase 2: TestAgent]
-    F -->|No| M{Deployment Enabled?}
+    F -->|No| GIT1[Git Commit & Create PR]
     
     G --> H{Tests Pass?}
-    H -->|Yes| I{Deployment Enabled?}
+    H -->|Yes| GIT2[Git Commit & Create PR]
     H -->|No| J[Report Test Failures]
+    
+    GIT1 --> I{Deployment Enabled?}
+    GIT2 --> I{Deployment Enabled?}
     
     I -->|Yes| K[Phase 3: DeployAgent]
     I -->|No| O[Phase 4: EmailAgent]
@@ -185,9 +191,6 @@ flowchart TD
     K --> L{Deployment Success?}
     L -->|Yes| O
     L -->|No| N[Rollback & Report]
-    
-    M -->|Yes| K
-    M -->|No| O
     
     O --> P[Send Notifications]
     P --> Q[Update Issue with Results]
@@ -202,6 +205,8 @@ flowchart TD
     style C fill:#e1f5fe
     style D fill:#f3e5f5
     style G fill:#e8f5e8
+    style GIT1 fill:#e8f8e8
+    style GIT2 fill:#e8f8e8
     style K fill:#fff3e0
     style O fill:#fce4ec
 ```
@@ -227,15 +232,17 @@ flowchart TD
     G --> I
     
     L --> M[Calculate Code Quality Score]
-    M --> N[Create Feature Branch]
-    N --> O[Organize File Structure]
-    O --> P[Commit Changes]
-    P --> Q[Create Pull Request]
-    Q --> R[Return Results with Metrics]
+    M --> N[Organize File Structure]
+    N --> O[Store Generated Code Locally]
+    O --> P[Return Results with Metrics]
+    
+    Note right of O: Code is NOT committed yet
+    Note right of P: Waiting for TestAgent validation
     
     style F fill:#c8e6c9
     style G fill:#ffecb3
     style M fill:#e1bee7
+    style O fill:#fff9c4
 ```
 
 ### TestAgent Workflow
@@ -262,13 +269,26 @@ flowchart TD
     L -->|No| N[Collect Failure Details]
     
     M --> O[Calculate Coverage Metrics]
-    O --> P[Return Success Results]
+    O --> P{Coverage Threshold Met?}
+    P -->|Yes| Q[Create Feature Branch]
+    P -->|No| R[Report Coverage Failure]
     
-    N --> Q[Return Failure Results]
+    Q --> S[Commit All Code & Tests]
+    S --> T[Create Pull Request]
+    T --> U[Return Success Results]
+    
+    N --> V[Return Failure Results]
+    R --> V
+    
+    Note right of Q: Git operations happen here
+    Note right of S: After successful testing
     
     style K fill:#ffcdd2
     style M fill:#c8e6c9
     style O fill:#e1bee7
+    style Q fill:#e8f8e8
+    style S fill:#e8f8e8
+    style T fill:#e8f8e8
 ```
 
 ### DeployAgent AWS Workflow
@@ -414,37 +434,49 @@ sequenceDiagram
             CODE->>CODE: Use Template Fallback
         end
         
-        CODE->>CODE: Create Feature Branch
         CODE->>CODE: Generate Entity, Repository, Service, Controller
-        CODE->>CODE: Organize File Structure
-        CODE->>GitHub: Commit Changes
-        CODE->>GitHub: Create Pull Request
-        CODE->>ORCH: Return Success with PR URL
+        CODE->>CODE: Organize File Structure Locally
+        CODE->>CODE: Calculate Code Quality Score
+        CODE->>ORCH: Return Success with Generated Files (NOT Committed)
+        
+        Note over CODE: Code stored locally, awaiting test validation
     end
     
     alt Testing Enabled
         rect rgb(248, 255, 248)
-            Note over ORCH,TEST: Phase 2: Testing (TestAgent)
-            ORCH->>TEST: Execute Testing Phase
+            Note over ORCH,TEST: Phase 2: Testing & Git Operations (TestAgent)
+            ORCH->>TEST: Execute Testing Phase with Generated Code
             TEST->>TEST: Analyze Generated Code
             TEST->>TEST: Generate JUnit Test Classes
             TEST->>TEST: Setup Mockito Configuration
             TEST->>TEST: Configure JaCoCo Coverage
             TEST->>TEST: Execute Test Suite
             
-            alt Tests Pass
+            alt Tests Pass & Coverage Met
                 TEST->>TEST: Generate Coverage Report
                 TEST->>TEST: Validate Coverage Threshold
-                TEST->>ORCH: Return Success with Metrics
-            else Tests Fail
+                TEST->>GitHub: Create Feature Branch
+                TEST->>GitHub: Commit All Code & Tests
+                TEST->>GitHub: Create Pull Request
+                TEST->>ORCH: Return Success with PR URL & Metrics
+                
+                Note over TEST,GitHub: Git operations happen AFTER successful testing
+            else Tests Fail or Coverage Low
                 TEST->>TEST: Collect Failure Details
                 TEST->>ORCH: Return Failure with Details
-                ORCH->>GitHub: Comment Test Failures
+                ORCH->>GitHub: Comment Test Failures (No Code Committed)
             end
+        end
+    else Testing Disabled
+        rect rgb(248, 255, 240)
+            Note over ORCH,GitHub: Direct Git Operations (No Testing)
+            ORCH->>GitHub: Create Feature Branch
+            ORCH->>GitHub: Commit Generated Code
+            ORCH->>GitHub: Create Pull Request
         end
     end
     
-    alt Deployment Enabled & Tests Passed
+    alt Deployment Enabled & Code Committed Successfully
         rect rgb(255, 248, 240)
             Note over ORCH,AWS: Phase 3: Deployment (DeployAgent)
             ORCH->>DEPLOY: Execute Deployment Phase
@@ -479,7 +511,8 @@ sequenceDiagram
         EMAIL->>EMAIL: Prepare Notification Data
         EMAIL->>EMAIL: Generate HTML Email Template
         EMAIL->>EMAIL: Include PR Details & Results
-        EMAIL->>EMAIL: Add Service URLs & Metrics
+        EMAIL->>EMAIL: Add Test Coverage & Metrics
+        EMAIL->>EMAIL: Add Service URLs (if deployed)
         
         loop For Each Recipient Group
             EMAIL->>SMTP: Send Professional Notification
