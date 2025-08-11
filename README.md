@@ -236,14 +236,20 @@ flowchart TD
     N --> O[Store Generated Code Locally]
     O --> P[Return Results with Metrics]
     
-    Note right of O: Code is NOT committed yet
-    Note right of P: Waiting for TestAgent validation
-    
     style F fill:#c8e6c9
     style G fill:#ffecb3
     style M fill:#e1bee7
     style O fill:#fff9c4
+    style P fill:#e8f5fe
+    
+    classDef noteStyle fill:#fffbf0,stroke:#f39c12,stroke-width:2px
+    class O,P noteStyle
 ```
+
+**Important Notes:**
+- 📁 Code is stored locally and **NOT committed** to Git at this stage
+- ⏳ Generated files await TestAgent validation before any Git operations
+- 🔄 This ensures only tested code reaches the repository
 
 ### TestAgent Workflow
 
@@ -280,16 +286,22 @@ flowchart TD
     N --> V[Return Failure Results]
     R --> V
     
-    Note right of Q: Git operations happen here
-    Note right of S: After successful testing
-    
     style K fill:#ffcdd2
     style M fill:#c8e6c9
     style O fill:#e1bee7
     style Q fill:#e8f8e8
     style S fill:#e8f8e8
     style T fill:#e8f8e8
+    
+    classDef gitOps fill:#d4edda,stroke:#28a745,stroke-width:3px
+    class Q,S,T gitOps
 ```
+
+**Critical TestAgent Operations:**
+- 🧪 **Testing First**: All code validation happens before Git operations
+- 📊 **Coverage Gates**: Configurable coverage thresholds must be met
+- 🌿 **Git Operations**: Branch creation, commit, and PR only after successful testing
+- ✅ **Quality Assurance**: Only validated code reaches the repository
 
 ### DeployAgent AWS Workflow
 
