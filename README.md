@@ -371,6 +371,151 @@ graph TB
     style FARGATE fill:#fff3e0
 ```
 
+### End-to-End Multi-Agent Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant GitHub as GitHub Repository
+    participant WH as Webhook Handler
+    participant ORCH as Multi-Agent Orchestrator
+    participant CODE as CodeAgent
+    participant AI as AI Service (Ollama/HF/Gemini)
+    participant TEST as TestAgent
+    participant DEPLOY as DeployAgent
+    participant AWS as AWS Infrastructure
+    participant EMAIL as EmailAgent
+    participant SMTP as Email Service
+    participant TEAM as Team Members
+
+    Note over GitHub,TEAM: GitHub Issue Creation & Multi-Agent Processing
+
+    GitHub->>WH: Issue Created Event
+    WH->>WH: Validate Webhook Signature
+    WH->>WH: Parse Issue Data
+    WH->>ORCH: Trigger Multi-Agent Processing
+    
+    Note over ORCH: Orchestration Initialization
+    ORCH->>ORCH: Initialize Agent Configuration
+    ORCH->>ORCH: Validate Processing Criteria
+    ORCH->>ORCH: Start 15-minute Timeout Timer
+    
+    rect rgb(240, 248, 255)
+        Note over ORCH,AI: Phase 1: Code Generation (CodeAgent)
+        ORCH->>CODE: Execute Code Generation Phase
+        CODE->>CODE: Analyze Issue Requirements
+        CODE->>CODE: Extract Entity Information
+        CODE->>CODE: Calculate Complexity Score
+        
+        alt AI Service Available
+            CODE->>AI: Request Code Generation
+            AI->>AI: Generate Entity Components
+            AI->>CODE: Return Generated Code
+        else AI Service Unavailable
+            CODE->>CODE: Use Template Fallback
+        end
+        
+        CODE->>CODE: Create Feature Branch
+        CODE->>CODE: Generate Entity, Repository, Service, Controller
+        CODE->>CODE: Organize File Structure
+        CODE->>GitHub: Commit Changes
+        CODE->>GitHub: Create Pull Request
+        CODE->>ORCH: Return Success with PR URL
+    end
+    
+    alt Testing Enabled
+        rect rgb(248, 255, 248)
+            Note over ORCH,TEST: Phase 2: Testing (TestAgent)
+            ORCH->>TEST: Execute Testing Phase
+            TEST->>TEST: Analyze Generated Code
+            TEST->>TEST: Generate JUnit Test Classes
+            TEST->>TEST: Setup Mockito Configuration
+            TEST->>TEST: Configure JaCoCo Coverage
+            TEST->>TEST: Execute Test Suite
+            
+            alt Tests Pass
+                TEST->>TEST: Generate Coverage Report
+                TEST->>TEST: Validate Coverage Threshold
+                TEST->>ORCH: Return Success with Metrics
+            else Tests Fail
+                TEST->>TEST: Collect Failure Details
+                TEST->>ORCH: Return Failure with Details
+                ORCH->>GitHub: Comment Test Failures
+            end
+        end
+    end
+    
+    alt Deployment Enabled & Tests Passed
+        rect rgb(255, 248, 240)
+            Note over ORCH,AWS: Phase 3: Deployment (DeployAgent)
+            ORCH->>DEPLOY: Execute Deployment Phase
+            DEPLOY->>DEPLOY: Validate AWS Prerequisites
+            DEPLOY->>DEPLOY: Create Dockerfile
+            DEPLOY->>DEPLOY: Build Docker Image
+            DEPLOY->>AWS: Create CloudFormation Stack
+            AWS->>AWS: Provision VPC, Subnets, Security Groups
+            AWS->>AWS: Create ECS Cluster & ECR Repository
+            AWS->>DEPLOY: Infrastructure Ready
+            
+            DEPLOY->>AWS: Push Image to ECR
+            DEPLOY->>AWS: Deploy ECS Service
+            AWS->>AWS: Start Fargate Tasks
+            AWS->>AWS: Perform Health Checks
+            
+            alt Deployment Success
+                AWS->>DEPLOY: Service Running & Healthy
+                DEPLOY->>ORCH: Return Success with Service URL
+            else Deployment Failure
+                AWS->>DEPLOY: Health Check Failed
+                DEPLOY->>AWS: Initiate Rollback
+                AWS->>AWS: Restore Previous Task Definition
+                DEPLOY->>ORCH: Return Failure with Rollback Status
+            end
+        end
+    end
+    
+    rect rgb(255, 240, 245)
+        Note over ORCH,TEAM: Phase 4: Email Notification (EmailAgent)
+        ORCH->>EMAIL: Execute Notification Phase
+        EMAIL->>EMAIL: Prepare Notification Data
+        EMAIL->>EMAIL: Generate HTML Email Template
+        EMAIL->>EMAIL: Include PR Details & Results
+        EMAIL->>EMAIL: Add Service URLs & Metrics
+        
+        loop For Each Recipient Group
+            EMAIL->>SMTP: Send Professional Notification
+            SMTP->>TEAM: Deliver Email to Team Members
+        end
+        
+        EMAIL->>ORCH: Return Notification Status
+    end
+    
+    Note over ORCH: Orchestration Finalization
+    ORCH->>ORCH: Aggregate All Results
+    ORCH->>ORCH: Calculate Total Execution Time
+    ORCH->>GitHub: Update Issue with Final Results
+    ORCH->>ORCH: Log Orchestration Metrics
+    ORCH->>ORCH: Cleanup Workspace
+    
+    Note over GitHub,TEAM: Process Complete - Team Notified
+    
+    rect rgb(255, 245, 245)
+        Note over ORCH: Error Handling & Fallbacks
+        alt Any Phase Fails
+            ORCH->>ORCH: Log Error Details
+            ORCH->>GitHub: Comment Error Information
+            ORCH->>EMAIL: Send Failure Notification
+            EMAIL->>SMTP: Alert Team of Failure
+            SMTP->>TEAM: Deliver Failure Alert
+        end
+        
+        alt Timeout Exceeded (15 minutes)
+            ORCH->>ORCH: Force Cleanup
+            ORCH->>GitHub: Comment Timeout Information
+            ORCH->>EMAIL: Send Timeout Notification
+        end
+    end
+```
+
 ## 🔧 Configuration
 
 ### Basic Multi-Agent Configuration
