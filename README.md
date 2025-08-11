@@ -157,6 +157,220 @@ The Multi-Agent Orchestrator coordinates a sophisticated 4-phase pipeline:
    - Comprehensive reporting with metrics
    - Multi-group email distribution
 
+## 🔄 Detailed Workflow Diagrams
+
+### Multi-Agent Orchestration Flow
+
+```mermaid
+flowchart TD
+    A[GitHub Issue Created] --> B{Issue Analysis}
+    B -->|Valid Request| C[Start Multi-Agent Orchestration]
+    B -->|Invalid| Z[Skip Processing]
+    
+    C --> D[Phase 1: CodeAgent]
+    D --> E{Code Generation Success?}
+    E -->|Yes| F{Testing Enabled?}
+    E -->|No| X[Report Failure & Exit]
+    
+    F -->|Yes| G[Phase 2: TestAgent]
+    F -->|No| M{Deployment Enabled?}
+    
+    G --> H{Tests Pass?}
+    H -->|Yes| I{Deployment Enabled?}
+    H -->|No| J[Report Test Failures]
+    
+    I -->|Yes| K[Phase 3: DeployAgent]
+    I -->|No| O[Phase 4: EmailAgent]
+    
+    K --> L{Deployment Success?}
+    L -->|Yes| O
+    L -->|No| N[Rollback & Report]
+    
+    M -->|Yes| K
+    M -->|No| O
+    
+    O --> P[Send Notifications]
+    P --> Q[Update Issue with Results]
+    Q --> R[Cleanup Workspace]
+    
+    J --> O
+    N --> O
+    X --> Q
+    Z --> END[End]
+    R --> END
+    
+    style C fill:#e1f5fe
+    style D fill:#f3e5f5
+    style G fill:#e8f5e8
+    style K fill:#fff3e0
+    style O fill:#fce4ec
+```
+
+### CodeAgent Detailed Workflow
+
+```mermaid
+flowchart TD
+    A[Receive Issue Data] --> B[Analyze Requirements]
+    B --> C[Extract Entity Information]
+    C --> D[Calculate Complexity Score]
+    D --> E{AI Service Available?}
+    
+    E -->|Yes| F[Generate with AI]
+    E -->|No| G[Use Template Fallback]
+    
+    F --> H[AI Component Generation]
+    H --> I[Entity Creation]
+    I --> J[Repository Generation]
+    J --> K[Service Layer Creation]
+    K --> L[Controller Implementation]
+    
+    G --> I
+    
+    L --> M[Calculate Code Quality Score]
+    M --> N[Create Feature Branch]
+    N --> O[Organize File Structure]
+    O --> P[Commit Changes]
+    P --> Q[Create Pull Request]
+    Q --> R[Return Results with Metrics]
+    
+    style F fill:#c8e6c9
+    style G fill:#ffecb3
+    style M fill:#e1bee7
+```
+
+### TestAgent Workflow
+
+```mermaid
+flowchart TD
+    A[Receive Generated Code Files] --> B[Analyze Test Requirements]
+    B --> C[Determine Test Types Needed]
+    C --> D{Mocking Required?}
+    
+    D -->|Yes| E[Setup Mockito Configuration]
+    D -->|No| F[Setup Basic Test Structure]
+    
+    E --> G[Generate Unit Tests]
+    F --> G
+    
+    G --> H[Generate Integration Tests]
+    H --> I[Configure JaCoCo Coverage]
+    I --> J[Update Maven Dependencies]
+    J --> K[Execute Test Suite]
+    
+    K --> L{Tests Pass?}
+    L -->|Yes| M[Generate Coverage Report]
+    L -->|No| N[Collect Failure Details]
+    
+    M --> O[Calculate Coverage Metrics]
+    O --> P[Return Success Results]
+    
+    N --> Q[Return Failure Results]
+    
+    style K fill:#ffcdd2
+    style M fill:#c8e6c9
+    style O fill:#e1bee7
+```
+
+### DeployAgent AWS Workflow
+
+```mermaid
+flowchart TD
+    A[Receive Test Results] --> B{Tests Passed?}
+    B -->|No| Z[Skip Deployment]
+    B -->|Yes| C[Validate AWS Prerequisites]
+    
+    C --> D[Create Dockerfile]
+    D --> E[Build Docker Image]
+    E --> F[Setup CloudFormation Template]
+    F --> G[Deploy Infrastructure Stack]
+    
+    G --> H{Stack Deployment Success?}
+    H -->|No| Y[Report Infrastructure Failure]
+    H -->|Yes| I[Push Image to ECR]
+    
+    I --> J[Update ECS Service]
+    J --> K[Wait for Deployment Stabilization]
+    K --> L[Perform Health Checks]
+    
+    L --> M{Health Check Pass?}
+    M -->|Yes| N[Return Success with Service URL]
+    M -->|No| O[Initiate Rollback]
+    
+    O --> P[Restore Previous Task Definition]
+    P --> Q[Return Failure with Rollback Status]
+    
+    Z --> END[End]
+    Y --> END
+    N --> END
+    Q --> END
+    
+    style G fill:#fff3e0
+    style L fill:#e8f5e8
+    style O fill:#ffcdd2
+```
+
+### AWS Infrastructure Provisioning
+
+```mermaid
+graph TB
+    subgraph "CloudFormation Stack"
+        CF[CloudFormation Template]
+        
+        subgraph "Networking"
+            VPC[VPC 10.0.0.0/16]
+            IGW[Internet Gateway]
+            PUB1[Public Subnet 1]
+            PUB2[Public Subnet 2]
+            RT[Route Table]
+            SG[Security Group]
+        end
+        
+        subgraph "Container Infrastructure"
+            ECR[ECR Repository]
+            ECS[ECS Cluster]
+            TD[Task Definition]
+            SVC[ECS Service]
+            FARGATE[Fargate Tasks]
+        end
+        
+        subgraph "Monitoring"
+            CW[CloudWatch Logs]
+            HC[Health Checks]
+        end
+        
+        subgraph "IAM"
+            EXEC[Task Execution Role]
+            TASK[Task Role]
+        end
+    end
+    
+    CF --> VPC
+    VPC --> IGW
+    VPC --> PUB1
+    VPC --> PUB2
+    VPC --> SG
+    IGW --> RT
+    RT --> PUB1
+    RT --> PUB2
+    
+    CF --> ECR
+    CF --> ECS
+    ECS --> TD
+    TD --> SVC
+    SVC --> FARGATE
+    
+    CF --> CW
+    CF --> EXEC
+    CF --> TASK
+    
+    FARGATE --> HC
+    
+    style VPC fill:#e3f2fd
+    style ECS fill:#f3e5f5
+    style ECR fill:#e8f5e8
+    style FARGATE fill:#fff3e0
+```
+
 ## 🔧 Configuration
 
 ### Basic Multi-Agent Configuration
@@ -183,6 +397,105 @@ const deploymentConfig = {
   cpu: '256',                   // CPU units
   memory: '512',                // Memory in MB
   desiredCount: 1               // Number of tasks
+};
+```
+
+### AWS Account Setup
+
+#### Required AWS Services
+- **Amazon ECS** (Elastic Container Service)
+- **Amazon ECR** (Elastic Container Registry)
+- **AWS CloudFormation** (Infrastructure as Code)
+- **Amazon VPC** (Virtual Private Cloud)
+- **AWS IAM** (Identity and Access Management)
+- **Amazon CloudWatch** (Logging and Monitoring)
+
+#### AWS Account Configuration Steps
+
+1. **Create AWS Account**
+   ```bash
+   # Sign up at: https://aws.amazon.com/
+   # Choose appropriate billing plan
+   ```
+
+2. **Configure AWS CLI**
+   ```bash
+   # Install AWS CLI
+   curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+   unzip awscliv2.zip
+   sudo ./aws/install
+   
+   # Configure credentials
+   aws configure
+   # AWS Access Key ID: [Your Access Key]
+   # AWS Secret Access Key: [Your Secret Key]  
+   # Default region: us-east-1
+   # Default output format: json
+   ```
+
+3. **Create IAM User for GitHub Agent**
+   ```bash
+   # Create user with programmatic access
+   aws iam create-user --user-name github-agent-deployment
+   
+   # Attach required policies
+   aws iam attach-user-policy --user-name github-agent-deployment \
+     --policy-arn arn:aws:iam::aws:policy/AmazonECS_FullAccess
+   
+   aws iam attach-user-policy --user-name github-agent-deployment \
+     --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
+   
+   aws iam attach-user-policy --user-name github-agent-deployment \
+     --policy-arn arn:aws:iam::aws:policy/CloudFormationFullAccess
+   
+   aws iam attach-user-policy --user-name github-agent-deployment \
+     --policy-arn arn:aws:iam::aws:policy/IAMFullAccess
+   
+   # Create access keys
+   aws iam create-access-key --user-name github-agent-deployment
+   ```
+
+#### AWS Cost Estimation
+
+| Service | Usage | Monthly Cost (USD) |
+|---------|-------|-------------------|
+| ECS Fargate | 1 task, 0.25 vCPU, 0.5GB | ~$10-15 |
+| ECR Storage | 1-5 Docker images | ~$1-3 |
+| CloudWatch Logs | Standard logging | ~$1-2 |
+| Data Transfer | Minimal | ~$1 |
+| **Total Estimated** | | **~$13-21/month** |
+
+#### Environment-Specific Configurations
+
+```typescript
+// Development Environment
+const devConfig = {
+  awsRegion: 'us-east-1',
+  serviceName: 'myapp-dev',
+  environment: 'dev',
+  cpu: '256',           // 0.25 vCPU
+  memory: '512',        // 0.5 GB
+  desiredCount: 1
+};
+
+// Staging Environment  
+const stagingConfig = {
+  awsRegion: 'us-east-1',
+  serviceName: 'myapp-staging',
+  environment: 'staging',
+  cpu: '512',           // 0.5 vCPU
+  memory: '1024',       // 1 GB
+  desiredCount: 2
+};
+
+// Production Environment
+const prodConfig = {
+  awsRegion: 'us-west-2',
+  serviceName: 'myapp-prod',
+  environment: 'prod',
+  cpu: '1024',          // 1 vCPU
+  memory: '2048',       // 2 GB
+  desiredCount: 3
 };
 ```
 
@@ -285,11 +598,44 @@ EMAIL_FROM=GitHub Agent <noreply@yourcompany.com>
 # Email Groups Configuration (JSON string)
 NOTIFICATION_GROUPS={"developers":["dev1@company.com"],"managers":["pm@company.com"],"qa":["qa@company.com"]}
 
-# Optional - AWS Configuration (for deployment)
+# AWS Configuration (Required for DeployAgent)
+AWS_ACCOUNT_ID=123456789012
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
 AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_aws_access_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+
+# AWS Deployment Settings
+AWS_ECR_REGISTRY=123456789012.dkr.ecr.us-east-1.amazonaws.com
+AWS_ECS_CLUSTER_PREFIX=github-agent
+DEPLOYMENT_SERVICE_NAME=github-agent-app
+DEPLOYMENT_ENVIRONMENT=dev
+DEPLOYMENT_CONTAINER_PORT=8080
+DEPLOYMENT_HEALTH_CHECK_PATH=/actuator/health
+
+# Resource Allocation
+DEPLOYMENT_CPU=256
+DEPLOYMENT_MEMORY=512
+DEPLOYMENT_DESIRED_COUNT=1
+
+# Testing Configuration
+TEST_COVERAGE_THRESHOLD=80
+JUNIT_VERSION=5.9.2
+MOCKITO_VERSION=5.1.1
+JACOCO_VERSION=0.8.8
 ```
+
+### AWS Environment Variables Explained
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `AWS_ACCOUNT_ID` | Your 12-digit AWS account ID | `123456789012` |
+| `AWS_ACCESS_KEY_ID` | IAM user access key for deployment | `AKIAIOSFODNN7EXAMPLE` |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret key | `wJalrXUtnFEMI/K7MDENG/...` |
+| `AWS_REGION` | AWS region for deployment | `us-east-1`, `us-west-2` |
+| `AWS_ECR_REGISTRY` | ECR registry URL | `{account}.dkr.ecr.{region}.amazonaws.com` |
+| `DEPLOYMENT_CPU` | ECS task CPU units | `256` (0.25 vCPU), `1024` (1 vCPU) |
+| `DEPLOYMENT_MEMORY` | ECS task memory in MB | `512`, `1024`, `2048` |
+| `DEPLOYMENT_DESIRED_COUNT` | Number of running tasks | `1` (dev), `3` (prod) |
 
 ## 🚀 Quick Start
 
@@ -339,6 +685,104 @@ npm run dev
 3. Set content type: `application/json`
 4. Add webhook secret (same as in your `.env`)
 5. Select events: Issues, Issue comments, Pull requests
+
+### 6. AWS Setup (Optional - for DeployAgent)
+
+#### Step 1: Create AWS Account & IAM User
+```bash
+# 1. Create AWS account at https://aws.amazon.com/
+# 2. Create IAM user for GitHub Agent deployment
+
+# Install AWS CLI
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
+# Configure AWS CLI
+aws configure
+# AWS Access Key ID: [Your Key]
+# AWS Secret Access Key: [Your Secret]
+# Default region: us-east-1
+# Default output format: json
+```
+
+#### Step 2: Setup IAM Permissions
+Create an IAM policy for GitHub Agent deployment:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecs:*",
+        "ecr:*",
+        "cloudformation:*",
+        "iam:CreateRole",
+        "iam:AttachRolePolicy",
+        "iam:PassRole",
+        "iam:GetRole",
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "ec2:CreateVpc",
+        "ec2:CreateSubnet",
+        "ec2:CreateSecurityGroup",
+        "ec2:CreateInternetGateway",
+        "ec2:AttachInternetGateway",
+        "ec2:CreateRouteTable",
+        "ec2:CreateRoute",
+        "ec2:AssociateRouteTable",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeAvailabilityZones"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+#### Step 3: Test AWS Connection
+```bash
+# Verify AWS CLI setup
+aws sts get-caller-identity
+
+# Check ECR access
+aws ecr describe-repositories --region us-east-1
+
+# Test ECS access
+aws ecs list-clusters --region us-east-1
+```
+
+#### Step 4: Docker Setup
+```bash
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+
+# Start Docker service
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Verify Docker installation
+docker --version
+docker run hello-world
+```
+
+#### Step 5: Test Deployment (Optional)
+```bash
+# Run deployment test with demo configuration
+npm run build
+node -e "
+const { DeployAgent } = require('./dist/agent/DeployAgent.js');
+const agent = new DeployAgent();
+console.log('DeployAgent initialized successfully for AWS deployment');
+"
+```
 
 ## 📊 Usage Examples
 
